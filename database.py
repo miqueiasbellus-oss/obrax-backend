@@ -7,7 +7,7 @@ from models import Base
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./obrax_quantum.db")
 
 # Para PostgreSQL em produção, use:
-# DATABASE_URL = "postgresql://user:password@localhost/obrax_quantum"
+SQLALCHEMY_DATABASE_URL = "postgresql://postgres:Miqueia$6969@db.tpgnxxndpcaxfipbieme.supabase.co:5432/postgres"
 
 engine = create_engine(
     DATABASE_URL,
