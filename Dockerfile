@@ -6,6 +6,7 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 
 RUN python -m venv .venv
+RUN .venv/bin/pip install --upgrade pip setuptools wheel
 
 COPY requirements.txt ./
 
