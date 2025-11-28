@@ -35,9 +35,9 @@ def init_db():
     
     # Importar aqui para evitar circular imports
     from models import Work, Activity, ActivityStatus, WorkType, ActivityPriority
-from app.models.user import User
-from app.core.security import get_password_hash
-    
+    from app.models.user import User
+    from app.core.security import get_password_hash
+
     db = SessionLocal()
     
     try:
