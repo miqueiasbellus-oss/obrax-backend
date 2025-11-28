@@ -3,6 +3,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from models import Base
 
+
 # Configuração do banco de dados
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./obrax_quantum.db")
 
@@ -34,11 +35,24 @@ def init_db():
     
     # Importar aqui para evitar circular imports
     from models import Work, Activity, ActivityStatus, WorkType, ActivityPriority
+from app.models.user import User
+from app.core.security import get_password_hash
     
     db = SessionLocal()
     
     try:
         # Verificar se já existem dados
+        # Verificar se já existem dados de obra
+        # Verificar e criar usuário inicial
+        if not db.query(User).filter(User.username == "Miqueias").first():
+            print("Criando usuário inicial 'Miqueias'")
+            hashed_password = get_password_hash("Miqueia$69")
+            initial_user = User(username="Miqueias", hashed_password=hashed_password, is_active=True)
+            db.add(initial_user)
+            db.commit()
+            print("Usuário inicial criado com sucesso.")
+
+        # Verificar se já existem dados de obra
         if db.query(Work).first():
             print("Banco de dados já inicializado")
             return
