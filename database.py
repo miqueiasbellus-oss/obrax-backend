@@ -3,11 +3,19 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from models import Base
 
+
 # Configuração do banco de dados
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./obrax_quantum.db")
 
-# Para PostgreSQL em produção, use:
-SQLALCHEMY_DATABASE_URL = "postgresql://postgres:Miqueia$6969@db.tpgnxxndpcaxfipbieme.supabase.co:5432/postgres"
+# Para PostgreSQL em produção, use a variável de ambiente DATABASE_URL.
+# Aqui fazemos um ajuste automático caso o prefixo venha como "postgres://"
+raw_db_url = DATABASE_URL
+
+# Corrige prefixo caso venha como postgres://
+if raw_db_url.startswith("postgres://"):
+    raw_db_url = raw_db_url.replace("postgres://", "postgresql://", 1)
+
+DATABASE_URL = raw_db_url
 
 engine = create_engine(
     DATABASE_URL,
@@ -34,116 +42,123 @@ def init_db():
     
     # Importar aqui para evitar circular imports
     from models import Work, Activity, ActivityStatus, WorkType, ActivityPriority
+    from models import User
+    from auth import get_password_hash
     
     db = SessionLocal()
-    
     try:
-        # Verificar se já existem dados
+        # Verificar se já existe um usuário inicial
+        if db.query(User).first():
+            print("Usuário inicial já existe")
+        else:
+            print("Criando usuário inicial 'Miqueias'")
+            hashed_password = get_password_hash("Miqueias$69")
+            initial_user = User(
+                username="Miqueias",
+                hashed_password=hashed_password,
+                is_active=True
+            )
+            db.add(initial_user)
+            db.commit()
+            print("Usuário inicial criado com sucesso.")
+
+        # Verificar se já existem dados de obra
         if db.query(Work).first():
             print("Banco de dados já inicializado")
             return
         
         # Criar obra de exemplo baseada nos FVS reais
         example_work = Work(
-            name="Residencial Vila Nova",
-            description="Construção de residencial unifamiliar com 3 pavimentos",
-            work_type=WorkType.CONSTRUCTION,
-            client_name="Construtora ABC Ltda",
-            location="Rua das Flores, 123 - São Paulo/SP",
-            budget=850000.00
+            name="Obra Exemplo OBRAX QUANTUM",
+            description="Obra modelo com FVS reais para testes de painel e medições",
+            work_type=WorkType.BUILDING,
+            location="Itajaí - SC",
+            progress_percentage=0.0
         )
-        
         db.add(example_work)
         db.commit()
         db.refresh(example_work)
         
-        # Criar atividades de exemplo baseadas nos FVS analisados
+        # Criar atividades de exemplo
         example_activities = [
             Activity(
                 work_id=example_work.id,
-                name="Locação da Obra",
-                description="Marcação e locação dos elementos estruturais",
-                ifs_code="PE00101_FS00203",
-                discipline="Infraestrutura",
-                front="Térreo",
-                service_type="Locação",
-                status=ActivityStatus.CLOSED,
+                name="Execução de alvenaria estrutural - Pavimento Tipo 01",
+                description="Execução das paredes estruturais, com blocos aparentes, FVS vinculados.",
+                status=ActivityStatus.PLANNED,
                 priority=ActivityPriority.HIGH,
-                progress_percentage=100.0,
-                responsible_user="João Silva",
-                estimated_hours=16.0,
-                actual_hours=14.0
+                progress_percentage=0.0,
+                responsible_user="Encarregado João Silva",
+                estimated_hours=120.0
             ),
             Activity(
                 work_id=example_work.id,
-                name="Execução de Radier",
-                description="Execução de radier em concreto armado",
-                ifs_code="PE00201_FS00303",
-                discipline="Infraestrutura",
-                front="Térreo",
-                service_type="Fundação",
-                status=ActivityStatus.CLOSED,
-                priority=ActivityPriority.HIGH,
-                progress_percentage=100.0,
-                responsible_user="Carlos Santos",
-                estimated_hours=40.0,
-                actual_hours=38.0
-            ),
-            Activity(
-                work_id=example_work.id,
-                name="Alvenaria de Vedação - Casa",
-                description="Execução de alvenaria de vedação em blocos cerâmicos",
-                ifs_code="PE01201_FS01403",
-                discipline="Alvenaria",
-                front="Térreo",
-                service_type="Alvenaria de Vedação",
-                status=ActivityStatus.IN_EXECUTION,
-                priority=ActivityPriority.MEDIUM,
-                progress_percentage=65.0,
-                responsible_user="Maria Oliveira",
-                estimated_hours=80.0,
-                actual_hours=52.0
-            ),
-            Activity(
-                work_id=example_work.id,
-                name="Revestimento em Argamassa",
-                description="Aplicação de revestimento interno em argamassa",
-                ifs_code="PE01401_FS01603",
-                discipline="Revestimento",
-                front="Térreo",
-                service_type="Revestimento Argamassa",
-                status=ActivityStatus.PCC_REQUIRED,
+                name="Instalação de fôrmas para laje",
+                description="Montagem de fôrmas metálicas e verificação de travamentos.",
+                status=ActivityStatus.PLANNED,
                 priority=ActivityPriority.MEDIUM,
                 progress_percentage=0.0,
-                responsible_user="Ana Costa",
+                responsible_user="Encarregado Maria Souza",
                 estimated_hours=60.0
             ),
             Activity(
                 work_id=example_work.id,
-                name="Instalações Elétricas",
-                description="Execução de instalações elétricas internas",
-                ifs_code="FS02703",
-                discipline="Instalações",
-                front="Térreo",
-                service_type="Instalações Elétricas",
-                status=ActivityStatus.READY,
+                name="Concretagem de laje - Trecho A",
+                description="Lançamento de concreto com controle de abatimento e FVS associados.",
+                status=ActivityStatus.PLANNED,
                 priority=ActivityPriority.HIGH,
                 progress_percentage=0.0,
-                responsible_user="Pedro Lima",
-                estimated_hours=45.0
+                responsible_user="Equipe Concreto",
+                estimated_hours=40.0
             ),
             Activity(
                 work_id=example_work.id,
-                name="Pintura Látex PVA",
-                description="Aplicação de pintura látex PVA em paredes internas",
-                ifs_code="PE02501_FS02603",
-                discipline="Acabamento",
-                front="Térreo",
-                service_type="Pintura",
+                name="Revisão de armaduras - Pavimento Tipo 02",
+                description="Conferência de diâmetros, espaçamentos e posicionamento de ferragens.",
+                status=ActivityStatus.PLANNED,
+                priority=ActivityPriority.MEDIUM,
+                progress_percentage=0.0,
+                responsible_user="Encarregado Carlos Lima",
+                estimated_hours=30.0
+            ),
+            Activity(
+                work_id=example_work.id,
+                name="Vistoria de segurança - Semana 01",
+                description="Checklist de FVS de segurança no pavimento em execução.",
                 status=ActivityStatus.PLANNED,
                 priority=ActivityPriority.LOW,
                 progress_percentage=0.0,
-                responsible_user="Luiza Santos",
+                responsible_user="Técnico de Segurança",
+                estimated_hours=20.0
+            ),
+            Activity(
+                work_id=example_work.id,
+                name="Montagem de andaimes fachada norte",
+                description="Montagem e verificação de estabilidade dos andaimes.",
+                status=ActivityStatus.PLANNED,
+                priority=ActivityPriority.MEDIUM,
+                progress_percentage=0.0,
+                responsible_user="Equipe Andaimes",
+                estimated_hours=50.0
+            ),
+            Activity(
+                work_id=example_work.id,
+                name="Instalação de caixilhos - Torre A",
+                description="Colocação dos caixilhos de alumínio e vedação inicial.",
+                status=ActivityStatus.PLANNED,
+                priority=ActivityPriority.LOW,
+                progress_percentage=0.0,
+                responsible_user="Equipe Esquadrias",
+                estimated_hours=70.0
+            ),
+            Activity(
+                work_id=example_work.id,
+                name="Medição de serviços executados - Semana 01",
+                description="Medição parcial dos serviços executados para conferência com FPM.",
+                status=ActivityStatus.PLANNED,
+                priority=ActivityPriority.LOW,
+                progress_percentage=0.0,
+                responsible_user="Engenharia de Obra",
                 estimated_hours=35.0
             )
         ]
@@ -162,4 +177,3 @@ def init_db():
 
 if __name__ == "__main__":
     init_db()
-
