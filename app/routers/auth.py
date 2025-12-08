@@ -9,33 +9,26 @@ from pydantic import BaseModel
 from database import get_db
 from app.models.user import User
 
-from passlib.context import CryptContext
-from jose import jwt
+# Tentamos reaproveitar tudo do app.core.security.
+# Se não existir get_password_hash lá, criamos um fallback local.
+try:
+    from app.core.security import create_access_token, verify_password, get_password_hash
+except ImportError:
+    from app.core.security import create_access_token, verify_password
+    from passlib.context import CryptContext
 
-# ---------------- CONFIG ----------------
+    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-SECRET_KEY = "obrax_super_secret_key"  # coloque no environment depois
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+    def get_password_hash(password: str) -> str:
+        return pwd_context.hash(password)
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 router = APIRouter()
 
-# ------------- FUNÇÕES UTILITÁRIAS -----------------
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
 
-def verify_password(password: str, hashed: str) -> bool:
-    return pwd_context.verify(password, hashed)
-
-def create_token(data: dict, expires_delta: timedelta):
-    to_encode = data.copy()
-    expire = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire.total_seconds()})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-
+# ---------- Função de autenticação comum ----------
 
 def authenticate_user(db: Session, username: str, password: str) -> Optional[User]:
     user = db.query(User).filter(User.username == username).first()
@@ -45,28 +38,37 @@ def authenticate_user(db: Session, username: str, password: str) -> Optional[Use
         return None
     return user
 
-# ------------- MODELOS -----------------
+
+# ---------- Schemas Pydantic ----------
 
 class RegisterRequest(BaseModel):
     username: str
     password: str
 
+
 class LoginRequest(BaseModel):
     username: str
     password: str
 
-# ------------- ENDPOINT: REGISTER -----------------
+
+# ---------- /auth/register ----------
 
 @router.post("/register")
 def register_user(payload: RegisterRequest, db: Session = Depends(get_db)):
-
-    exists = db.query(User).filter(User.username == payload.username).first()
-    if exists:
+    """
+    Cria um novo usuário.
+    POST /auth/register
+    Body JSON: {"username": "...", "password": "..."}
+    """
+    existing = db.query(User).filter(User.username == payload.username).first()
+    if existing:
         raise HTTPException(status_code=400, detail="Username already exists")
+
+    hashed = get_password_hash(payload.password)
 
     user = User(
         username=payload.username,
-        hashed_password=hash_password(payload.password),
+        hashed_password=hashed,
         is_active=True
     )
 
@@ -74,36 +76,58 @@ def register_user(payload: RegisterRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(user)
 
-    return {"message": "User created", "username": user.username}
+    return {"message": "User created successfully", "username": user.username}
 
 
-# ------------- ENDPOINT: LOGIN VIA JSON -------------
+# ---------- /auth/login (JSON) ----------
 
 @router.post("/login")
 def login_json(payload: LoginRequest, db: Session = Depends(get_db)):
-
+    """
+    Login via JSON.
+    POST /auth/login
+    Body JSON: {"username": "...", "password": "..."}
+    """
     user = authenticate_user(db, payload.username, payload.password)
     if not user:
-        raise HTTPException(status_code=401, detail="Incorrect username or password")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+        )
 
-    token = create_token({"sub": user.username}, timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    token = create_access_token(
+        data={"sub": user.username},
+        expires_delta=access_token_expires
+    )
 
     return {"access_token": token, "token_type": "bearer"}
 
 
-# ------------- ENDPOINT: LOGIN OAUTH2 (FORM-DATA) -------------
+# ---------- /auth/token (OAuth2 form-data) ----------
 
 @router.post("/token")
 def login_token(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
     db: Session = Depends(get_db),
 ):
-
+    """
+    Login no padrão OAuth2PasswordRequestForm.
+    POST /auth/token
+    Body form-data: username, password
+    """
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
-        raise HTTPException(status_code=401, detail="Incorrect username or password")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
-    token = create_token({"sub": user.username}, timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    token = create_access_token(
+        data={"sub": user.username},
+        expires_delta=access_token_expires
+    )
 
     return {"access_token": token, "token_type": "bearer"}
-
