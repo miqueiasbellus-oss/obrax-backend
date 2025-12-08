@@ -1,7 +1,5 @@
 from sqlalchemy import Column, Integer, String, Boolean
-from sqlalchemy.ext.declarative import declarative_base
-
-Base = declarative_base()
+from models import Base  # <-- usa o MESMO Base que o resto do projeto
 
 class User(Base):
     __tablename__ = "users"
