@@ -1,17 +1,14 @@
 import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from models import Base
+from models import Base  # Base principal do projeto
 
-# Configuração do banco de dados
+# URL do banco (Render ou SQLite local)
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./obrax_quantum.db")
 
-# Ajuste automático caso o prefixo venha como "postgres://"
-raw_db_url = DATABASE_URL
-if raw_db_url.startswith("postgres://"):
-    raw_db_url = raw_db_url.replace("postgres://", "postgresql://", 1)
-
-DATABASE_URL = raw_db_url
+# Render às vezes usa postgres:// (antigo)
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 engine = create_engine(
     DATABASE_URL,
@@ -21,13 +18,8 @@ engine = create_engine(
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
-def create_tables():
-    """Criar todas as tabelas no banco de dados"""
-    Base.metadata.create_all(bind=engine)
-
-
 def get_db():
-    """Dependency para obter sessão do banco de dados"""
+    """Cria uma sessão por request"""
     db = SessionLocal()
     try:
         yield db
@@ -37,13 +29,19 @@ def get_db():
 
 def init_db():
     """
-    Inicializa o banco de dados:
-    - Cria as tabelas com base no Base.metadata
-    (não insere usuário inicial nem dados de exemplo por enquanto)
+    Inicializa o banco:
+    - importa TODOS os modelos
+    - cria tabelas
     """
     try:
         print("Inicializando banco de dados...")
-        create_tables()
+
+        # IMPORTA TODOS OS MODELOS QUE USAM Base
+        from models import Work, Activity, ActivityDependency
+        from app.models.user import User  # <-- IMPORTANTE
+
+        Base.metadata.create_all(bind=engine)
+
         print("Banco de dados inicializado com sucesso (sem dados de exemplo).")
     except Exception as e:
         print(f"Erro ao inicializar banco: {e}")
