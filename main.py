@@ -53,10 +53,26 @@ async def health_check():
         "timestamp": datetime.utcnow().isoformat()
     }
 
+# Teste de conexão com o banco de dados
+@app.get("/db-test")
+async def db_test(db: Session = Depends(get_db)):
+    """
+    Endpoint simples para testar a conexão com o banco.
+    Se retornar {"db": "ok"}, a conexão está funcionando.
+    Se der erro 500, veja o detalhe no JSON ou nos logs do Render.
+    """
+    try:
+        db.execute("SELECT 1")
+        return {"db": "ok"}
+    except Exception as e:
+        # Em produção o ideal é não expor o erro inteiro, mas aqui ajuda no debug
+        raise HTTPException(status_code=500, detail=f"DB error: {str(e)}")
+
 # ==================== OBRAS ====================
 
 @app.get("/api/works", response_model=List[WorkResponse])
-async def get_works(current_user: Annotated[User, Depends(get_current_active_user)],
+async def get_works(
+    current_user: Annotated[User, Depends(get_current_active_user)],
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     status: Optional[str] = None,
@@ -75,7 +91,10 @@ async def get_works(current_user: Annotated[User, Depends(get_current_active_use
     return works
 
 @app.get("/api/works/summary", response_model=List[WorkSummary])
-async def get_works_summary(current_user: Annotated[User, Depends(get_current_active_user)], db: Session = Depends(get_db)):
+async def get_works_summary(
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    db: Session = Depends(get_db)
+):
     """Obter resumo de todas as obras com estatísticas"""
     works = db.query(Work).all()
     summaries = []
@@ -103,7 +122,11 @@ async def get_works_summary(current_user: Annotated[User, Depends(get_current_ac
     return summaries
 
 @app.get("/api/works/{work_id}", response_model=WorkResponse)
-async def get_work(work_id: int, current_user: Annotated[User, Depends(get_current_active_user)], db: Session = Depends(get_db)):
+async def get_work(
+    work_id: int,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    db: Session = Depends(get_db)
+):
     """Obter detalhes de uma obra específica"""
     work = db.query(Work).filter(Work.id == work_id).first()
     if not work:
@@ -111,7 +134,11 @@ async def get_work(work_id: int, current_user: Annotated[User, Depends(get_curre
     return work
 
 @app.post("/api/works", response_model=WorkResponse)
-async def create_work(work: WorkCreate, current_user: Annotated[User, Depends(get_current_active_user)], db: Session = Depends(get_db)):
+async def create_work(
+    work: WorkCreate,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    db: Session = Depends(get_db)
+):
     """Criar nova obra"""
     db_work = Work(**work.dict())
     db.add(db_work)
@@ -120,7 +147,12 @@ async def create_work(work: WorkCreate, current_user: Annotated[User, Depends(ge
     return db_work
 
 @app.put("/api/works/{work_id}", response_model=WorkResponse)
-async def update_work(work_id: int, work_update: WorkUpdate, current_user: Annotated[User, Depends(get_current_active_user)], db: Session = Depends(get_db)):
+async def update_work(
+    work_id: int,
+    work_update: WorkUpdate,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    db: Session = Depends(get_db)
+):
     """Atualizar obra existente"""
     db_work = db.query(Work).filter(Work.id == work_id).first()
     if not db_work:
@@ -136,7 +168,11 @@ async def update_work(work_id: int, work_update: WorkUpdate, current_user: Annot
     return db_work
 
 @app.delete("/api/works/{work_id}")
-async def delete_work(work_id: int, current_user: Annotated[User, Depends(get_current_active_user)], db: Session = Depends(get_db)):
+async def delete_work(
+    work_id: int,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    db: Session = Depends(get_db)
+):
     """Excluir obra"""
     db_work = db.query(Work).filter(Work.id == work_id).first()
     if not db_work:
@@ -149,7 +185,8 @@ async def delete_work(work_id: int, current_user: Annotated[User, Depends(get_cu
 # ==================== ATIVIDADES ====================
 
 @app.get("/api/activities", response_model=List[ActivityResponse])
-async def get_activities(current_user: Annotated[User, Depends(get_current_active_user)],
+async def get_activities(
+    current_user: Annotated[User, Depends(get_current_active_user)],
     work_id: Optional[int] = None,
     status: Optional[ActivityStatus] = None,
     discipline: Optional[str] = None,
@@ -174,7 +211,8 @@ async def get_activities(current_user: Annotated[User, Depends(get_current_activ
     return activities
 
 @app.get("/api/activities/summary", response_model=List[ActivitySummary])
-async def get_activities_summary(current_user: Annotated[User, Depends(get_current_active_user)],
+async def get_activities_summary(
+    current_user: Annotated[User, Depends(get_current_active_user)],
     work_id: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
@@ -209,7 +247,11 @@ async def get_activities_summary(current_user: Annotated[User, Depends(get_curre
     return summaries
 
 @app.get("/api/activities/{activity_id}", response_model=ActivityResponse)
-async def get_activity(activity_id: int, current_user: Annotated[User, Depends(get_current_active_user)], db: Session = Depends(get_db)):
+async def get_activity(
+    activity_id: int,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    db: Session = Depends(get_db)
+):
     """Obter detalhes de uma atividade específica"""
     activity = db.query(Activity).filter(Activity.id == activity_id).first()
     if not activity:
@@ -217,7 +259,11 @@ async def get_activity(activity_id: int, current_user: Annotated[User, Depends(g
     return activity
 
 @app.post("/api/activities", response_model=ActivityResponse)
-async def create_activity(activity: ActivityCreate, current_user: Annotated[User, Depends(get_current_active_user)], db: Session = Depends(get_db)):
+async def create_activity(
+    activity: ActivityCreate,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    db: Session = Depends(get_db)
+):
     """Criar nova atividade"""
     # Verificar se a obra existe
     work = db.query(Work).filter(Work.id == activity.work_id).first()
@@ -231,7 +277,12 @@ async def create_activity(activity: ActivityCreate, current_user: Annotated[User
     return db_activity
 
 @app.put("/api/activities/{activity_id}", response_model=ActivityResponse)
-async def update_activity(activity_id: int, activity_update: ActivityUpdate, current_user: Annotated[User, Depends(get_current_active_user)], db: Session = Depends(get_db)):
+async def update_activity(
+    activity_id: int,
+    activity_update: ActivityUpdate,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    db: Session = Depends(get_db)
+):
     """Atualizar atividade existente"""
     db_activity = db.query(Activity).filter(Activity.id == activity_id).first()
     if not db_activity:
@@ -247,7 +298,8 @@ async def update_activity(activity_id: int, activity_update: ActivityUpdate, cur
     return db_activity
 
 @app.post("/api/activities/{activity_id}/change-status")
-async def change_activity_status(current_user: Annotated[User, Depends(get_current_active_user)],
+async def change_activity_status(
+    current_user: Annotated[User, Depends(get_current_active_user)],
     activity_id: int,
     new_status: ActivityStatus,
     db: Session = Depends(get_db)
@@ -286,7 +338,11 @@ async def change_activity_status(current_user: Annotated[User, Depends(get_curre
     }
 
 @app.get("/api/activities/{activity_id}/valid-transitions")
-async def get_valid_transitions(activity_id: int, current_user: Annotated[User, Depends(get_current_active_user)], db: Session = Depends(get_db)):
+async def get_valid_transitions(
+    activity_id: int,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    db: Session = Depends(get_db)
+):
     """Obter transições válidas para uma atividade"""
     activity = db.query(Activity).filter(Activity.id == activity_id).first()
     if not activity:
@@ -301,7 +357,11 @@ async def get_valid_transitions(activity_id: int, current_user: Annotated[User, 
 # ==================== DASHBOARD ====================
 
 @app.get("/api/dashboard/stats")
-async def get_dashboard_stats(current_user: Annotated[User, Depends(get_current_active_user)], work_id: Optional[int] = None, db: Session = Depends(get_db)):
+async def get_dashboard_stats(
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    work_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
     """Obter estatísticas para o dashboard"""
     # Filtrar por obra se especificado
     works_query = db.query(Work)
@@ -326,9 +386,11 @@ async def get_dashboard_stats(current_user: Annotated[User, Depends(get_current_
     # Atividades em atraso
     overdue_activities = []
     for activity in activities:
-        if (activity.planned_end and 
+        if (
+            activity.planned_end and 
             activity.status not in [ActivityStatus.CLOSED] and 
-            datetime.utcnow() > activity.planned_end):
+            datetime.utcnow() > activity.planned_end
+        ):
             overdue_activities.append(activity)
     
     # Progresso geral
@@ -364,4 +426,3 @@ async def test_endpoint():
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
-
