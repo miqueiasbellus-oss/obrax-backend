@@ -60,23 +60,34 @@ def register_user(payload: RegisterRequest, db: Session = Depends(get_db)):
     POST /auth/register
     Body JSON: {"username": "...", "password": "..."}
     """
-    existing = db.query(User).filter(User.username == payload.username).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Username already exists")
+    try:
+        existing = db.query(User).filter(User.username == payload.username).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Username already exists")
 
-    hashed = get_password_hash(payload.password)
+        hashed = get_password_hash(payload.password)
 
-    user = User(
-        username=payload.username,
-        hashed_password=hashed,
-        is_active=True
-    )
+        user = User(
+            username=payload.username,
+            hashed_password=hashed,
+            is_active=True
+        )
 
-    db.add(user)
-    db.commit()
-    db.refresh(user)
+        db.add(user)
+        db.commit()
+        db.refresh(user)
 
-    return {"message": "User created successfully", "username": user.username}
+        return {"message": "User created successfully", "username": user.username}
+
+    except HTTPException:
+        # Se for erro de validação nosso (ex: username já existe), só repassa
+        raise
+    except Exception as e:
+        # Aqui captura QUALQUER erro e devolve o nome/descrição no detail
+        raise HTTPException(
+            status_code=500,
+            detail=f"Register error: {type(e).__name__}: {e}"
+        )
 
 
 # ---------- /auth/login (JSON) ----------
@@ -88,20 +99,29 @@ def login_json(payload: LoginRequest, db: Session = Depends(get_db)):
     POST /auth/login
     Body JSON: {"username": "...", "password": "..."}
     """
-    user = authenticate_user(db, payload.username, payload.password)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
+    try:
+        user = authenticate_user(db, payload.username, payload.password)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect username or password",
+            )
+
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        token = create_access_token(
+            data={"sub": user.username},
+            expires_delta=access_token_expires
         )
 
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    token = create_access_token(
-        data={"sub": user.username},
-        expires_delta=access_token_expires
-    )
+        return {"access_token": token, "token_type": "bearer"}
 
-    return {"access_token": token, "token_type": "bearer"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Login error: {type(e).__name__}: {e}"
+        )
 
 
 # ---------- /auth/token (OAuth2 form-data) ----------
@@ -116,18 +136,27 @@ def login_token(
     POST /auth/token
     Body form-data: username, password
     """
-    user = authenticate_user(db, form_data.username, form_data.password)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
+    try:
+        user = authenticate_user(db, form_data.username, form_data.password)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect username or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        token = create_access_token(
+            data={"sub": user.username},
+            expires_delta=access_token_expires
         )
 
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    token = create_access_token(
-        data={"sub": user.username},
-        expires_delta=access_token_expires
-    )
+        return {"access_token": token, "token_type": "bearer"}
 
-    return {"access_token": token, "token_type": "bearer"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Token error: {type(e).__name__}: {e}"
+        )
