@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from typing import List, Optional, Annotated
 from datetime import datetime
 import uvicorn
@@ -57,16 +58,14 @@ async def health_check():
 @app.get("/db-test")
 async def db_test(db: Session = Depends(get_db)):
     """
-    Endpoint simples para testar a conexão com o banco.
-    Se retornar {"db": "ok"}, a conexão está funcionando.
-    Se der erro 500, veja o detalhe no JSON ou nos logs do Render.
+    Testa a conexão REAL com o banco de dados.
+    Se retornar {"db": "ok", "result": 1}, a conexão está funcionando.
     """
     try:
-        db.execute("SELECT 1")
-        return {"db": "ok"}
+        result = db.execute(text("SELECT 1")).scalar()
+        return {"db": "ok", "result": result}
     except Exception as e:
-        # Em produção o ideal é não expor o erro inteiro, mas aqui ajuda no debug
-        raise HTTPException(status_code=500, detail=f"DB error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"DB error: {e}")
 
 # ==================== OBRAS ====================
 
@@ -426,3 +425,4 @@ async def test_endpoint():
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
