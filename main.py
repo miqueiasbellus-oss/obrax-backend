@@ -44,7 +44,20 @@ async def startup_event():
 create_programacao_endpoints(app)
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 
-# Health Check
+# ==================== ROOT ====================
+
+@app.get("/")
+async def root():
+    return {
+        "status": "ok",
+        "service": "OBRAX QUANTUM API",
+        "message": "Backend online",
+        "version": "1.0.0",
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+# ==================== HEALTH ====================
+
 @app.get("/health")
 async def health_check():
     return {
@@ -54,7 +67,8 @@ async def health_check():
         "timestamp": datetime.utcnow().isoformat()
     }
 
-# Teste de conexão com o banco de dados
+# ==================== DB TEST ====================
+
 @app.get("/db-test")
 async def db_test(db: Session = Depends(get_db)):
     """
@@ -80,12 +94,12 @@ async def get_works(
 ):
     """Listar todas as obras com filtros opcionais"""
     query = db.query(Work)
-    
+
     if status:
         query = query.filter(Work.status == status)
     if work_type:
         query = query.filter(Work.work_type == work_type)
-    
+
     works = query.offset(skip).limit(limit).all()
     return works
 
@@ -97,14 +111,14 @@ async def get_works_summary(
     """Obter resumo de todas as obras com estatísticas"""
     works = db.query(Work).all()
     summaries = []
-    
+
     for work in works:
         activities = db.query(Activity).filter(Activity.work_id == work.id).all()
         total_activities = len(activities)
         completed_activities = len([a for a in activities if a.status == ActivityStatus.CLOSED])
-        
+
         progress = (completed_activities / total_activities * 100) if total_activities > 0 else 0
-        
+
         summaries.append(WorkSummary(
             id=work.id,
             name=work.name,
@@ -117,7 +131,7 @@ async def get_works_summary(
             end_date=work.end_date,
             budget=work.budget
         ))
-    
+
     return summaries
 
 @app.get("/api/works/{work_id}", response_model=WorkResponse)
@@ -156,11 +170,11 @@ async def update_work(
     db_work = db.query(Work).filter(Work.id == work_id).first()
     if not db_work:
         raise HTTPException(status_code=404, detail="Obra não encontrada")
-    
+
     update_data = work_update.dict(exclude_unset=True)
     for field, value in update_data.items():
         setattr(db_work, field, value)
-    
+
     db_work.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(db_work)
@@ -176,7 +190,7 @@ async def delete_work(
     db_work = db.query(Work).filter(Work.id == work_id).first()
     if not db_work:
         raise HTTPException(status_code=404, detail="Obra não encontrada")
-    
+
     db.delete(db_work)
     db.commit()
     return {"message": "Obra excluída com sucesso"}
@@ -196,7 +210,7 @@ async def get_activities(
 ):
     """Listar atividades com filtros"""
     query = db.query(Activity)
-    
+
     if work_id:
         query = query.filter(Activity.work_id == work_id)
     if status:
@@ -205,7 +219,7 @@ async def get_activities(
         query = query.filter(Activity.discipline.ilike(f"%{discipline}%"))
     if responsible_user:
         query = query.filter(Activity.responsible_user.ilike(f"%{responsible_user}%"))
-    
+
     activities = query.offset(skip).limit(limit).all()
     return activities
 
@@ -219,16 +233,16 @@ async def get_activities_summary(
     query = db.query(Activity)
     if work_id:
         query = query.filter(Activity.work_id == work_id)
-    
+
     activities = query.all()
     summaries = []
-    
+
     for activity in activities:
         days_overdue = None
         if activity.planned_end and activity.status not in [ActivityStatus.CLOSED]:
             days_overdue = (datetime.utcnow() - activity.planned_end).days
             days_overdue = max(0, days_overdue)
-        
+
         summaries.append(ActivitySummary(
             id=activity.id,
             name=activity.name,
@@ -242,7 +256,7 @@ async def get_activities_summary(
             planned_end=activity.planned_end,
             days_overdue=days_overdue
         ))
-    
+
     return summaries
 
 @app.get("/api/activities/{activity_id}", response_model=ActivityResponse)
@@ -264,11 +278,10 @@ async def create_activity(
     db: Session = Depends(get_db)
 ):
     """Criar nova atividade"""
-    # Verificar se a obra existe
     work = db.query(Work).filter(Work.id == activity.work_id).first()
     if not work:
         raise HTTPException(status_code=404, detail="Obra não encontrada")
-    
+
     db_activity = Activity(**activity.dict())
     db.add(db_activity)
     db.commit()
@@ -286,11 +299,11 @@ async def update_activity(
     db_activity = db.query(Activity).filter(Activity.id == activity_id).first()
     if not db_activity:
         raise HTTPException(status_code=404, detail="Atividade não encontrada")
-    
+
     update_data = activity_update.dict(exclude_unset=True)
     for field, value in update_data.items():
         setattr(db_activity, field, value)
-    
+
     db_activity.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(db_activity)
@@ -307,30 +320,27 @@ async def change_activity_status(
     activity = db.query(Activity).filter(Activity.id == activity_id).first()
     if not activity:
         raise HTTPException(status_code=404, detail="Atividade não encontrada")
-    
+
     current_status = activity.status
-    
-    # Validar transição
+
     if new_status not in VALID_TRANSITIONS.get(current_status, []):
         raise HTTPException(
             status_code=400,
             detail=f"Transição inválida: {current_status} -> {new_status}"
         )
-    
-    # Atualizar status
+
     activity.status = new_status
     activity.updated_at = datetime.utcnow()
-    
-    # Atualizar datas baseado no status
+
     if new_status == ActivityStatus.IN_EXECUTION and not activity.actual_start:
         activity.actual_start = datetime.utcnow()
     elif new_status == ActivityStatus.CLOSED and not activity.actual_end:
         activity.actual_end = datetime.utcnow()
         activity.progress_percentage = 100.0
-    
+
     db.commit()
     db.refresh(activity)
-    
+
     return {
         "message": f"Status alterado de {current_status} para {new_status}",
         "activity": activity
@@ -346,7 +356,7 @@ async def get_valid_transitions(
     activity = db.query(Activity).filter(Activity.id == activity_id).first()
     if not activity:
         raise HTTPException(status_code=404, detail="Atividade não encontrada")
-    
+
     valid_transitions = VALID_TRANSITIONS.get(activity.status, [])
     return {
         "current_status": activity.status,
@@ -362,40 +372,35 @@ async def get_dashboard_stats(
     db: Session = Depends(get_db)
 ):
     """Obter estatísticas para o dashboard"""
-    # Filtrar por obra se especificado
     works_query = db.query(Work)
     activities_query = db.query(Activity)
-    
+
     if work_id:
         works_query = works_query.filter(Work.id == work_id)
         activities_query = activities_query.filter(Activity.work_id == work_id)
-    
+
     works = works_query.all()
     activities = activities_query.all()
-    
-    # Estatísticas gerais
+
     total_works = len(works)
     total_activities = len(activities)
-    
-    # Estatísticas por status
+
     status_counts = {}
-    for status in ActivityStatus:
-        status_counts[status.value] = len([a for a in activities if a.status == status])
-    
-    # Atividades em atraso
+    for status_item in ActivityStatus:
+        status_counts[status_item.value] = len([a for a in activities if a.status == status_item])
+
     overdue_activities = []
     for activity in activities:
         if (
-            activity.planned_end and 
-            activity.status not in [ActivityStatus.CLOSED] and 
+            activity.planned_end and
+            activity.status not in [ActivityStatus.CLOSED] and
             datetime.utcnow() > activity.planned_end
         ):
             overdue_activities.append(activity)
-    
-    # Progresso geral
+
     total_progress = sum(a.progress_percentage for a in activities)
     avg_progress = (total_progress / total_activities) if total_activities > 0 else 0
-    
+
     return {
         "total_works": total_works,
         "total_activities": total_activities,
@@ -406,7 +411,7 @@ async def get_dashboard_stats(
             "HIGH": len([a for a in activities if a.priority == ActivityPriority.HIGH]),
             "MEDIUM": len([a for a in activities if a.priority == ActivityPriority.MEDIUM]),
             "LOW": len([a for a in activities if a.priority == ActivityPriority.LOW]),
-            "CRITICAL": len([a for a in activities if a.priority == ActivityPriority.CRITICAL])
+            "CRITICAL": len([a for a in activities if a.priority == ActivityPriority.CRITICAL]),
         }
     }
 
@@ -417,7 +422,7 @@ async def test_endpoint():
         "message": "API funcionando corretamente",
         "features": [
             "Gestão de Obras",
-            "Controle de Atividades", 
+            "Controle de Atividades",
             "Máquina de Estados",
             "Dashboard em Tempo Real"
         ]
@@ -425,4 +430,3 @@ async def test_endpoint():
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
-
