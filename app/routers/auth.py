@@ -9,23 +9,28 @@ from pydantic import BaseModel
 from database import get_db
 from app.models.user import User
 
-# Tentamos reaproveitar tudo do app.core.security.
-# Se não existir get_password_hash lá, criamos um fallback local.
-try:
-    from app.core.security import create_access_token, verify_password, get_password_hash
-except ImportError:
-    from app.core.security import create_access_token, verify_password
-    from passlib.context import CryptContext
+# Usamos apenas a criação de token do core
+from app.core.security import create_access_token
 
-    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Nossa própria configuração de hash de senha
+from passlib.context import CryptContext
 
-    def get_password_hash(password: str) -> str:
-        return pwd_context.hash(password)
-
+# pbkdf2_sha256 não tem limite de 72 bytes como o bcrypt
+pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 router = APIRouter()
 
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+
+# ---------- Funções de senha ----------
+
+def get_password_hash(password: str) -> str:
+    return pwd_context.hash(password)
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
 
 
 # ---------- Função de autenticação comum ----------
