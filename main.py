@@ -17,7 +17,7 @@ from models import (
     ActivityStatus, ActivityPriority, WorkType,
     VALID_TRANSITIONS
 )
-from api_sprint1 import create_programacao_endpoints
+# from api_sprint1 import create_programacao_endpoints  # Desativado temporariamente
 from app.routers import auth
 from api_sprint0 import router as sprint0_router
 
@@ -44,8 +44,8 @@ async def startup_event():
 # Criar endpoints do Sprint 0
 app.include_router(sprint0_router, prefix="/api/sprint0", tags=["Sprint 0"])
 
-# Criar endpoints do Sprint 1
-create_programacao_endpoints(app)
+# Criar endpoints do Sprint 1 (DESATIVADO - aguardando migração para models.py)
+# create_programacao_endpoints(app)
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 
 # ==================== ROOT ====================
