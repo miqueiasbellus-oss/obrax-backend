@@ -19,6 +19,7 @@ from models import (
 )
 from api_sprint1 import create_programacao_endpoints
 from app.routers import auth
+from api_sprint0 import router as sprint0_router
 
 app = FastAPI(
     title="OBRAX QUANTUM API",
@@ -39,6 +40,9 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup_event():
     init_db()
+
+# Criar endpoints do Sprint 0
+app.include_router(sprint0_router, prefix="/api/sprint0", tags=["Sprint 0"])
 
 # Criar endpoints do Sprint 1
 create_programacao_endpoints(app)

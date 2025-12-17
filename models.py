@@ -267,3 +267,122 @@ VALID_TRANSITIONS = {
     ActivityStatus.CLOSED: []  # Estado final
 }
 
+
+# ==================== SPRINT 0: EVENTOS PCC, FVS, NC ====================
+
+class FVSStatus(str, Enum):
+    PASS = "PASS"
+    FAIL = "FAIL"
+
+class NCOrigin(str, Enum):
+    FVS = "FVS"
+    AUDITORIA = "Auditoria"
+    CLIENTE = "Cliente"
+
+class NCStatus(str, Enum):
+    ABERTA = "ABERTA"
+    FECHADA = "FECHADA"
+
+# Modelos SQLAlchemy para Eventos
+
+class EventPCC(Base):
+    __tablename__ = "events_pcc"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    obra_id = Column(Integer, nullable=False, index=True)
+    atividade_id = Column(Integer, nullable=False, index=True)
+    equipe_id = Column(Integer, nullable=False)
+    task_id = Column(Integer, ForeignKey("activities.id"), nullable=True)
+    requested_at = Column(DateTime, nullable=False)
+    confirmed_at = Column(DateTime, nullable=True)
+    confirmed_flag = Column(Integer, default=0, nullable=False)  # 0 = pending, 1 = confirmed
+    executor_id = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+class EventFVS(Base):
+    __tablename__ = "events_fvs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    obra_id = Column(Integer, nullable=False, index=True)
+    service_id = Column(Integer, nullable=False)
+    task_id = Column(Integer, ForeignKey("activities.id"), nullable=True)
+    executor_id = Column(Integer, nullable=False)
+    inspected_at = Column(DateTime, nullable=False)
+    status = Column(SQLEnum(FVSStatus), nullable=False)
+    rework_count = Column(Integer, default=0, nullable=False)
+    observations = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+class EventNC(Base):
+    __tablename__ = "events_nc"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    obra_id = Column(Integer, nullable=False, index=True)
+    service_id = Column(Integer, nullable=True)
+    task_id = Column(Integer, ForeignKey("activities.id"), nullable=True)
+    fvs_id = Column(Integer, ForeignKey("events_fvs.id"), nullable=True)
+    origin = Column(SQLEnum(NCOrigin), nullable=False)
+    status = Column(SQLEnum(NCStatus), default=NCStatus.ABERTA, nullable=False)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    closed_at = Column(DateTime, nullable=True)
+
+# Modelos Pydantic para API
+
+class EventPCCCreate(BaseModel):
+    obra_id: int
+    atividade_id: int
+    equipe_id: int
+    task_id: Optional[int] = None
+
+class EventPCCResponse(BaseModel):
+    id: int
+    obra_id: int
+    atividade_id: int
+    equipe_id: int
+    task_id: Optional[int] = None
+    requested_at: datetime
+    confirmed_at: Optional[datetime] = None
+    confirmed_flag: int
+    executor_id: Optional[int] = None
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+class EventFVSCreate(BaseModel):
+    obra_id: int
+    service_id: int
+    task_id: int
+    status: FVSStatus
+    observations: Optional[str] = None
+
+class EventFVSResponse(BaseModel):
+    id: int
+    obra_id: int
+    service_id: int
+    task_id: Optional[int] = None
+    executor_id: int
+    inspected_at: datetime
+    status: FVSStatus
+    rework_count: int
+    observations: Optional[str] = None
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+class EventNCResponse(BaseModel):
+    id: int
+    obra_id: int
+    service_id: Optional[int] = None
+    task_id: Optional[int] = None
+    fvs_id: Optional[int] = None
+    origin: NCOrigin
+    status: NCStatus
+    description: Optional[str] = None
+    created_at: datetime
+    closed_at: Optional[datetime] = None
+    
+    class Config:
+        from_attributes = True

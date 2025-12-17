@@ -6,15 +6,12 @@ from datetime import datetime, timedelta
 import json
 
 from database import get_db
-from models_sprint1 import (
-    Programacao, ProgramacaoAtividade, AtividadeEvento, FVSResultado, 
-    Medicao, DiarioObra, Notificacao,
-    ProgramacaoCreate, ProgramacaoAtividadeCreate, ProgramacaoAtividadeResponse,
-    AtualizacaoRapidaRequest, FVSRequest, FVSResponse, MedicaoDecisaoRequest, 
-    MedicaoResponse, DificuldadeRequest, NotificacaoResponse,
-    AtividadeEncarregadoSummary,
-    StatusAtividade, TipoEvento, StatusMedicao, AcaoRapida
+from models import (
+    Activity, ActivityStatus, ActivityPriority,
+    EventPCC, EventFVS, EventNC,
+    FVSStatus, NCOrigin, NCStatus
 )
+# TODO: Sprint 1 models need to be migrated to models.py following Activity pattern
 
 # ==================== PROGRAMAÇÃO QUINZENAL ====================
 
