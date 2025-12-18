@@ -205,3 +205,52 @@ async def list_tasks(obra_id: int, db: Session = Depends(get_db)):
     """Lista todas as tarefas de uma obra"""
     tasks = db.query(Activity).filter(Activity.work_id == obra_id).order_by(Activity.created_at.desc()).all()
     return tasks
+
+import os
+from datetime import datetime
+
+@router.post("/dev/seed")
+async def dev_seed(obra_id: int, db: Session = Depends(get_db)):
+    """
+    DEV ONLY: cria tarefas demo na tabela Activity para uma obra.
+    Só funciona se ENABLE_DEV_SEED=true.
+    Idempotente: se já existir Activity para a obra, não duplica.
+    """
+    if os.getenv("ENABLE_DEV_SEED", "").lower() not in ("1", "true", "yes", "on"):
+        raise HTTPException(status_code=404, detail="Not found")
+
+    # Não duplica
+    already = db.query(Activity).filter(Activity.work_id == obra_id).limit(1).all()
+    if already:
+        return {"ok": True, "created": 0, "message": "Seed skipped (activities already exist)"}
+
+    now = datetime.utcnow()
+
+    demo = [
+        Activity(
+            work_id=obra_id,
+            name="Instalar contramarco (PCC)",
+            status=ActivityStatus.PCC_REQUIRED,
+            created_at=now,
+            updated_at=now
+        ),
+        Activity(
+            work_id=obra_id,
+            name="Aplicar manta acústica (Execução)",
+            status=ActivityStatus.READY,
+            created_at=now,
+            updated_at=now
+        ),
+        Activity(
+            work_id=obra_id,
+            name="FVS - Porta corta-fogo (Inspeção)",
+            status=ActivityStatus.INSPECTION_PENDING,
+            created_at=now,
+            updated_at=now
+        ),
+    ]
+
+    db.add_all(demo)
+    db.commit()
+
+    return {"ok": True, "created": len(demo), "obra_id": obra_id}
