@@ -70,7 +70,7 @@ async def confirm_pcc(event: EventPCCCreate, db: Session = Depends(get_db)):
         requested_at=datetime.utcnow(),
         confirmed_at=datetime.utcnow(),
         confirmed_flag=1,
-        executor_id=1  # TODO: Get from auth context
+        executor_id=1
     )
     db.add(pcc_event)
 
@@ -90,12 +90,13 @@ async def confirm_pcc(event: EventPCCCreate, db: Session = Depends(get_db)):
 
 @router.get("/pcc/list/{obra_id}", response_model=List[EventPCCResponse])
 async def list_pcc_events(obra_id: int, db: Session = Depends(get_db)):
-    return (
+    events = (
         db.query(EventPCC)
         .filter(EventPCC.obra_id == obra_id)
         .order_by(EventPCC.created_at.desc())
         .all()
     )
+    return events
 
 # ==================== FVS ENDPOINTS ====================
 
@@ -115,14 +116,14 @@ async def inspect_fvs(event: EventFVSCreate, db: Session = Depends(get_db)):
         obra_id=event.obra_id,
         service_id=event.service_id,
         task_id=event.task_id,
-        executor_id=1,  # TODO: Get from auth context
+        executor_id=1,
         inspected_at=datetime.utcnow(),
         status=event.status,
         rework_count=0,
         observations=event.observations
     )
     db.add(fvs_event)
-    db.flush()  # pega fvs_event.id antes do commit
+    db.flush()
 
     nc_event = None
     if event.status == FVSStatus.FAIL:
@@ -156,5 +157,56 @@ async def inspect_fvs(event: EventFVSCreate, db: Session = Depends(get_db)):
 
 @router.get("/fvs/list/{obra_id}", response_model=List[EventFVSResponse])
 async def list_fvs_events(obra_id: int, db: Session = Depends(get_db)):
-    return (
+    events = (
         db.query(EventFVS)
+        .filter(EventFVS.obra_id == obra_id)
+        .order_by(EventFVS.created_at.desc())
+        .all()
+    )
+    return events
+
+# ==================== NC ENDPOINTS ====================
+
+@router.get("/nc/list/{obra_id}", response_model=List[EventNCResponse])
+async def list_nc_events(obra_id: int, db: Session = Depends(get_db)):
+    events = (
+        db.query(EventNC)
+        .filter(EventNC.obra_id == obra_id)
+        .order_by(EventNC.created_at.desc())
+        .all()
+    )
+    return events
+
+# ==================== TASKS ENDPOINTS ====================
+
+@router.get("/tasks/list/{obra_id}")
+async def list_tasks(obra_id: int, db: Session = Depends(get_db)):
+    tasks = (
+        db.query(Activity)
+        .filter(Activity.work_id == obra_id)
+        .order_by(Activity.created_at.desc())
+        .all()
+    )
+    return tasks
+
+# ==================== DEV SEED (DEV ONLY) ====================
+
+@router.post("/dev/seed")
+async def dev_seed(obra_id: int, db: Session = Depends(get_db)):
+    if os.getenv("ENABLE_DEV_SEED", "").lower() not in ("1", "true", "yes", "on"):
+        raise HTTPException(status_code=404, detail="Not found")
+
+    already = db.query(Activity).filter(Activity.work_id == obra_id).limit(1).all()
+    if already:
+        return {"ok": True, "created": 0, "message": "Seed skipped (activities already exist)"}
+
+    now = datetime.utcnow()
+    demo = [
+        Activity(work_id=obra_id, name="Instalar contramarco (PCC)", status=ActivityStatus.PCC_REQUIRED, created_at=now, updated_at=now),
+        Activity(work_id=obra_id, name="Aplicar manta acústica (Execução)", status=ActivityStatus.READY, created_at=now, updated_at=now),
+        Activity(work_id=obra_id, name="FVS - Porta corta-fogo (Inspeção)", status=ActivityStatus.INSPECTION_PENDING, created_at=now, updated_at=now),
+    ]
+
+    db.add_all(demo)
+    db.commit()
+    return {"ok": True, "created": len(demo), "obra_id": obra_id}
