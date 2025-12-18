@@ -1,10 +1,16 @@
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
 sqlalchemy==2.0.23
-psycopg2-binary==2.9.9
+
+# Evita build nativo no Python 3.13
+psycopg[binary]>=3.2.0,<4
+
 alembic==1.12.1
-pydantic==2.5.0
-pydantic-settings==2.1.0
+
+# Compatível com Python 3.13 (wheels prontos, sem Rust build)
+pydantic>=2.8.2,<3
+pydantic-settings>=2.4.0,<3
+
 python-jose[cryptography]
 passlib[bcrypt]
 python-multipart==0.0.6
