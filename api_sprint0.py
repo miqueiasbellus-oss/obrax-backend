@@ -154,9 +154,16 @@ async def inspect_fvs(
     db.add(fvs_event)
     db.flush()  # Flush to get fvs_event.id
 
-    # Create NC if FVS failed
+       # Create NC if FVS failed
     nc_event = None
     if event.status == FVSStatus.FAIL:
         nc_event = EventNC(
             obra_id=event.obra_id,
             service_id=event.service_id,
+            task_id=event.task_id,
+            fvs_id=fvs_event.id,
+            origin=NCOrigin.FVS,
+            status=NCStatus.ABERTA,
+            description=f"NC automática criada por FVS FAIL. {event.observations or ''}"
+        )
+        db.add(nc_event)
