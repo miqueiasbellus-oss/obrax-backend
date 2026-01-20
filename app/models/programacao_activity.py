@@ -1,14 +1,16 @@
-class Programacao(Base):
-    __tablename__ = "programacoes"
+class ProgramacaoActivity(Base):
+    __tablename__ = "programacao_activities"
 
     id = Column(Integer, primary_key=True)
-    work_id = Column(Integer, ForeignKey("works.id"), nullable=False)
-    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
 
-    start_date = Column(Date, nullable=False)
-    end_date = Column(Date, nullable=False)
-    description = Column(Text)
+    programacao_id = Column(Integer, ForeignKey("programacoes.id"), nullable=False)
+    activity_id = Column(Integer, ForeignKey("activities.id"), nullable=False)
 
-    is_active = Column(Boolean, default=True)
+    encarregado_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    predecessor_user_id = Column(Integer, ForeignKey("users.id"))
+
+    audio_eng = Column(String)
+    audio_mestre = Column(String)
+    location_ref = Column(String)
 
     created_at = Column(DateTime, default=datetime.utcnow)
