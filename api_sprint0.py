@@ -1,13 +1,13 @@
 """
 OBRAX QUANTUM - Sprint 0
-Endpoints para PCC, FVS e NC
+Endpoints para PCC, FVS, NC e Painel do Encarregado
 """
 
 import os
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -20,25 +20,39 @@ from models import (
     VALID_TRANSITIONS
 )
 
+# ⚠️ import do User só para DEV seed
+from app.models.user import User
+from app.routers.auth import get_password_hash
+
 router = APIRouter()
 
-# ==================== HELPER FUNCTIONS ====================
+# =========================================================
+# HELPERS
+# =========================================================
 
 def validate_state_transition(current_status: ActivityStatus, target_status: ActivityStatus) -> bool:
     allowed_transitions = VALID_TRANSITIONS.get(current_status, [])
     return target_status in allowed_transitions
+
 
 def get_next_status_after_pcc(current_status: ActivityStatus) -> ActivityStatus:
     if current_status != ActivityStatus.PCC_REQUIRED:
         raise ValueError(f"Cannot confirm PCC from state: {current_status}")
     return ActivityStatus.PCC_CONFIRMED
 
+
 def get_next_status_after_fvs(current_status: ActivityStatus, fvs_result: FVSStatus) -> ActivityStatus:
     if current_status != ActivityStatus.INSPECTION_PENDING:
         raise ValueError(f"Cannot inspect FVS from state: {current_status}")
-    return ActivityStatus.INSPECTED_PASS if fvs_result == FVSStatus.PASS else ActivityStatus.INSPECTED_FAIL
+    return (
+        ActivityStatus.INSPECTED_PASS
+        if fvs_result == FVSStatus.PASS
+        else ActivityStatus.INSPECTED_FAIL
+    )
 
-# ==================== HEALTH ENDPOINT ====================
+# =========================================================
+# HEALTH
+# =========================================================
 
 @router.get("/health")
 async def health_check():
@@ -48,7 +62,9 @@ async def health_check():
         "service": "OBRAX QUANTUM API - Sprint 0"
     }
 
-# ==================== PCC ENDPOINTS ====================
+# =========================================================
+# PCC
+# =========================================================
 
 @router.post("/pcc/confirm", response_model=dict)
 async def confirm_pcc(event: EventPCCCreate, db: Session = Depends(get_db)):
@@ -59,7 +75,7 @@ async def confirm_pcc(event: EventPCCCreate, db: Session = Depends(get_db)):
     if task.status != ActivityStatus.PCC_REQUIRED:
         raise HTTPException(
             status_code=400,
-            detail=f"Cannot confirm PCC from state: {task.status}. Task must be in PCC_REQUIRED state."
+            detail=f"Cannot confirm PCC from state: {task.status}"
         )
 
     pcc_event = EventPCC(
@@ -74,8 +90,7 @@ async def confirm_pcc(event: EventPCCCreate, db: Session = Depends(get_db)):
     )
     db.add(pcc_event)
 
-    next_status = get_next_status_after_pcc(task.status)
-    task.status = next_status
+    task.status = get_next_status_after_pcc(task.status)
     task.updated_at = datetime.utcnow()
 
     db.commit()
@@ -88,17 +103,19 @@ async def confirm_pcc(event: EventPCCCreate, db: Session = Depends(get_db)):
         "new_status": task.status.value
     }
 
+
 @router.get("/pcc/list/{obra_id}", response_model=List[EventPCCResponse])
 async def list_pcc_events(obra_id: int, db: Session = Depends(get_db)):
-    events = (
+    return (
         db.query(EventPCC)
         .filter(EventPCC.obra_id == obra_id)
         .order_by(EventPCC.created_at.desc())
         .all()
     )
-    return events
 
-# ==================== FVS ENDPOINTS ====================
+# =========================================================
+# FVS
+# =========================================================
 
 @router.post("/fvs/inspect", response_model=dict)
 async def inspect_fvs(event: EventFVSCreate, db: Session = Depends(get_db)):
@@ -109,7 +126,7 @@ async def inspect_fvs(event: EventFVSCreate, db: Session = Depends(get_db)):
     if task.status != ActivityStatus.INSPECTION_PENDING:
         raise HTTPException(
             status_code=400,
-            detail=f"Cannot inspect FVS from state: {task.status}. Task must be in INSPECTION_PENDING state."
+            detail=f"Cannot inspect FVS from state: {task.status}"
         )
 
     fvs_event = EventFVS(
@@ -138,8 +155,7 @@ async def inspect_fvs(event: EventFVSCreate, db: Session = Depends(get_db)):
         )
         db.add(nc_event)
 
-    next_status = get_next_status_after_fvs(task.status, event.status)
-    task.status = next_status
+    task.status = get_next_status_after_fvs(task.status, event.status)
     task.updated_at = datetime.utcnow()
 
     db.commit()
@@ -155,58 +171,122 @@ async def inspect_fvs(event: EventFVSCreate, db: Session = Depends(get_db)):
         "new_status": task.status.value
     }
 
+
 @router.get("/fvs/list/{obra_id}", response_model=List[EventFVSResponse])
 async def list_fvs_events(obra_id: int, db: Session = Depends(get_db)):
-    events = (
+    return (
         db.query(EventFVS)
         .filter(EventFVS.obra_id == obra_id)
         .order_by(EventFVS.created_at.desc())
         .all()
     )
-    return events
 
-# ==================== NC ENDPOINTS ====================
+# =========================================================
+# NC
+# =========================================================
 
 @router.get("/nc/list/{obra_id}", response_model=List[EventNCResponse])
 async def list_nc_events(obra_id: int, db: Session = Depends(get_db)):
-    events = (
+    return (
         db.query(EventNC)
         .filter(EventNC.obra_id == obra_id)
         .order_by(EventNC.created_at.desc())
         .all()
     )
-    return events
 
-# ==================== TASKS ENDPOINTS ====================
+# =========================================================
+# TASKS / PAINEL ENCARREGADO
+# =========================================================
 
 @router.get("/tasks/list/{obra_id}")
-async def list_tasks(obra_id: int, db: Session = Depends(get_db)):
-    tasks = (
-        db.query(Activity)
-        .filter(Activity.work_id == obra_id)
-        .order_by(Activity.created_at.desc())
-        .all()
-    )
-    return tasks
+async def list_tasks(
+    obra_id: int,
+    encarregado: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db)
+):
+    """
+    Lista atividades da obra.
+    - Se encarregado for informado, filtra por Activity.responsible_user
+    """
+    q = db.query(Activity).filter(Activity.work_id == obra_id)
 
-# ==================== DEV SEED (DEV ONLY) ====================
+    if encarregado:
+        q = q.filter(Activity.responsible_user == encarregado)
+
+    return q.order_by(Activity.created_at.desc()).all()
+
+# =========================================================
+# DEV SEED - ATIVIDADES
+# =========================================================
 
 @router.post("/dev/seed")
 async def dev_seed(obra_id: int, db: Session = Depends(get_db)):
     if os.getenv("ENABLE_DEV_SEED", "").lower() not in ("1", "true", "yes", "on"):
         raise HTTPException(status_code=404, detail="Not found")
 
-    already = db.query(Activity).filter(Activity.work_id == obra_id).limit(1).all()
+    already = db.query(Activity).filter(Activity.work_id == obra_id).first()
     if already:
-        return {"ok": True, "created": 0, "message": "Seed skipped (activities already exist)"}
+        return {"ok": True, "created": 0, "message": "Seed skipped (already exists)"}
 
     now = datetime.utcnow()
     demo = [
-        Activity(work_id=obra_id, name="Instalar contramarco (PCC)", status=ActivityStatus.PCC_REQUIRED, created_at=now, updated_at=now),
-        Activity(work_id=obra_id, name="Aplicar manta acústica (Execução)", status=ActivityStatus.READY, created_at=now, updated_at=now),
-        Activity(work_id=obra_id, name="FVS - Porta corta-fogo (Inspeção)", status=ActivityStatus.INSPECTION_PENDING, created_at=now, updated_at=now),
+        Activity(
+            work_id=obra_id,
+            name="Instalar contramarco",
+            status=ActivityStatus.PCC_REQUIRED,
+            responsible_user="Marcelo",
+            created_at=now,
+            updated_at=now
+        ),
+        Activity(
+            work_id=obra_id,
+            name="Aplicar manta acústica",
+            status=ActivityStatus.READY,
+            responsible_user="Nicolas",
+            created_at=now,
+            updated_at=now
+        ),
+        Activity(
+            work_id=obra_id,
+            name="FVS Porta corta-fogo",
+            status=ActivityStatus.INSPECTION_PENDING,
+            responsible_user="Marcelo",
+            created_at=now,
+            updated_at=now
+        ),
     ]
 
     db.add_all(demo)
     db.commit()
     return {"ok": True, "created": len(demo), "obra_id": obra_id}
+
+# =========================================================
+# DEV SEED - USUÁRIOS
+# =========================================================
+
+@router.post("/dev/seed_users")
+async def dev_seed_users(db: Session = Depends(get_db)):
+    if os.getenv("ENABLE_DEV_SEED", "").lower() not in ("1", "true", "yes", "on"):
+        raise HTTPException(status_code=404, detail="Not found")
+
+    users = [
+        ("marcelo", "123456"),
+        ("nicolas", "123456"),
+        ("mestre", "123456"),
+    ]
+
+    created = 0
+    for username, pwd in users:
+        exists = db.query(User).filter(User.username == username).first()
+        if not exists:
+            db.add(
+                User(
+                    username=username,
+                    hashed_password=get_password_hash(pwd),
+                    is_active=True
+                )
+            )
+            created += 1
+
+    db.commit()
+    return {"ok": True, "created": created}
